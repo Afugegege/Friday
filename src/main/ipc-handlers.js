@@ -53,6 +53,10 @@ function setupIpcHandlers() {
     }
   });
 
+  ipcMain.handle('friday:cancel-task', async () => {
+    return aiOrchestrator.cancelActiveOperation();
+  });
+
   ipcMain.handle('friday:process-command', async (_event, text, options) => {
     return await aiOrchestrator.processCommand(text, options, (status) => {
       if (windowManager.pillWindow && !windowManager.pillWindow.isDestroyed()) {

@@ -28,7 +28,9 @@ class ScreenService {
           return {
             success: true,
             filePath: this.tempScreenshotPath,
-            base64: nativeResult.base64
+            base64: nativeResult.base64,
+            width: nativeResult.width || 1920,
+            height: nativeResult.height || 1080
           };
         }
       } catch (err) {
@@ -42,7 +44,7 @@ class ScreenService {
         '-ExecutionPolicy', 'Bypass',
         '-File', this.scriptPath,
         '-OutputPath', this.tempScreenshotPath
-      ], (err, stdout, stderr) => {
+      ], { timeout: 8000 }, (err, stdout, stderr) => {
         if (err || !fs.existsSync(this.tempScreenshotPath)) {
           resolve({
             success: false,
@@ -67,7 +69,7 @@ class ScreenService {
   }
 
   /**
-   * Click mouse at coordinate (x, y)
+   * Click mouse at coordinate (x, y) with timeout protection
    */
   async clickMouse(x, y) {
     return new Promise((resolve) => {
@@ -78,7 +80,7 @@ class ScreenService {
         '-Action', 'click',
         '-X', Math.round(x).toString(),
         '-Y', Math.round(y).toString()
-      ], (err, stdout) => {
+      ], { timeout: 4000 }, (err, stdout) => {
         if (err || (stdout && stdout.includes('Error'))) {
           resolve({ success: false, error: err ? err.message : stdout });
         } else {
@@ -100,7 +102,7 @@ class ScreenService {
         '-Action', 'double_click',
         '-X', Math.round(x).toString(),
         '-Y', Math.round(y).toString()
-      ], (err, stdout) => {
+      ], { timeout: 4000 }, (err, stdout) => {
         if (err || (stdout && stdout.includes('Error'))) {
           resolve({ success: false, error: err ? err.message : stdout });
         } else {
@@ -122,7 +124,7 @@ class ScreenService {
         '-Action', 'right_click',
         '-X', Math.round(x).toString(),
         '-Y', Math.round(y).toString()
-      ], (err, stdout) => {
+      ], { timeout: 4000 }, (err, stdout) => {
         if (err || (stdout && stdout.includes('Error'))) {
           resolve({ success: false, error: err ? err.message : stdout });
         } else {
@@ -143,7 +145,7 @@ class ScreenService {
         '-File', this.inputScriptPath,
         '-Action', 'scroll',
         '-ScrollAmount', amount.toString()
-      ], (err, stdout) => {
+      ], { timeout: 4000 }, (err, stdout) => {
         if (err || (stdout && stdout.includes('Error'))) {
           resolve({ success: false, error: err ? err.message : stdout });
         } else {
@@ -154,7 +156,7 @@ class ScreenService {
   }
 
   /**
-   * Type text via Windows SendKeys
+   * Type text via Windows SendKeys with timeout
    */
   async sendKeyboardText(text) {
     return new Promise((resolve) => {
@@ -164,7 +166,7 @@ class ScreenService {
         '-File', this.inputScriptPath,
         '-Action', 'type',
         '-Text', text
-      ], (err, stdout) => {
+      ], { timeout: 6000 }, (err, stdout) => {
         if (err || (stdout && stdout.includes('Error'))) {
           resolve({ success: false, error: err ? err.message : stdout });
         } else {
@@ -185,7 +187,7 @@ class ScreenService {
         '-File', this.inputScriptPath,
         '-Action', 'key',
         '-Text', key
-      ], (err, stdout) => {
+      ], { timeout: 4000 }, (err, stdout) => {
         if (err || (stdout && stdout.includes('Error'))) {
           resolve({ success: false, error: err ? err.message : stdout });
         } else {
@@ -193,6 +195,26 @@ class ScreenService {
         }
       });
     });
+  }
+
+  /**
+   * Closed-loop click with state verification
+   */
+  async clickWithVerification(x, y) {
+    const clickRes = await this.clickMouse(x, y);
+    if (!clickRes.success) {
+      return { success: false, verified: false, error: clickRes.error };
+    }
+
+    // Brief delay to allow UI to respond
+    await new Promise(r => setTimeout(r, 120));
+    const postCap = await this.captureScreen();
+    return {
+      success: true,
+      verified: postCap.success,
+      message: clickRes.message,
+      postStateCaptured: postCap.success
+    };
   }
 }
 

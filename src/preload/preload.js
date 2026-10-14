@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('fridayAPI', {
 
   // Assistant & Voice Actions
   processCommand: (text, options) => ipcRenderer.invoke('friday:process-command', text, options),
+  cancelTask: () => ipcRenderer.invoke('friday:cancel-task'),
   transcribeAudio: (arrayBuffer, mimeType) => ipcRenderer.invoke('friday:transcribe-audio', arrayBuffer, mimeType),
   synthesizeSpeech: (text) => ipcRenderer.invoke('friday:synthesize-speech', text),
   notifyStatus: (status) => ipcRenderer.send('friday:notify-status', status),

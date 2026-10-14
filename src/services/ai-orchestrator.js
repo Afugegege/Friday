@@ -1,6 +1,7 @@
 const https = require('https');
 const toolRegistry = require('../tools/tool-registry');
 const memoryService = require('./memory-service');
+const actionEngine = require('./action-engine');
 const screenService = require('./screen-service');
 const activityLogger = require('./activity-logger');
 const config = require('../config/config');
@@ -16,13 +17,9 @@ CORE DIRECTIVES:
 2. COMPLEX MULTI-STEP PLANNING & WORKFLOWS (e.g. "plan me a trip to Greece", "organize my schedule", "compare laptops"):
    - When the user brings up a complex project or travel goal:
      a) Acknowledge the destination or goal with tactical confidence ("Greece sounds phenomenal.").
-     b) Proactively ask 2-3 focused follow-up questions to gather necessary details (e.g., "Are you looking to island hop through Santorini and Mykonos or explore Athens? How many days are you planning, and what's your target travel window?").
-     c) Offer platform choices to execute:
-        "I can open Google Flights and Booking.com for you, search live top spots via web search, or prepare an itinerary directly in your notes. Which platform would you prefer to start with?"
-     d) Follow through on subsequent turns:
-        - When the user specifies details or names a platform, call travel_search (with google_flights, booking, skyscanner, airbnb, etc.).
-        - Call web_search to find live activities, best seasons, and hidden gems.
-        - Call save_note to write and preserve their complete itinerary.
+     b) Proactively ask 1-2 focused follow-up questions to gather necessary details (e.g. departure airport, travel dates, budget).
+     c) Offer platform choices to execute: Google Flights, Skyscanner, Booking.com, Airbnb, or local notes.
+     d) Distinguish between searching options and booking them. NEVER claim to have booked a flight or room unless confirmed.
 3. AUTONOMOUS SCREEN & QUIZ SOLVING:
    - If the user asks to solve, answer, do, or complete a question/quiz/test on screen (e.g., Cisco CCNA, AWS, exam questions, multiple choice):
      YOU MUST CALL solve_screen_quiz tool! It uses high-precision GPT-4o vision to analyze the question, determine the academically correct option, click the radio option, and click the Submit button.
@@ -32,25 +29,22 @@ CORE DIRECTIVES:
    - When asked to research a technical concept, comparison, or study topic (e.g. "research IPv6 and save notes", "compare TCP and UDP", "find cybersecurity internships in Ireland and compare requirements"):
      Call conduct_research, analyze the sources, prepare a structured markdown summary (in Chinese if requested by user), and call save_research_notes to save it to disk and Knowledge Memory.
 5. CODE & DEVELOPER ASSISTANCE:
-   - When asked about project bugs or build errors (e.g. "find the error in my C++ project and explain how to fix it"):
+   - When asked about project bugs or build errors:
      Call diagnose_project or git_inspect, read the error output, identify the root cause, and explain the exact resolution cleanly.
 6. PERSISTENT MEMORY & SCHEDULING:
-   - When asked to remember something (e.g. "remember that I need to finish this assignment tonight"):
-     Call save_note with category 'reminder'.
-   - When asked "what did I ask you to remember?" or to recall previous notes:
-     Call get_notes.
-   - When asked to set a reminder or schedule a background task:
-     Call schedule_task.
+   - When asked to remember something: Call save_note.
+   - When asked to recall previous notes: Call get_notes.
+   - When asked to set a reminder or schedule a background task: Call schedule_task.
 7. TACTICAL TONE & CONCISENESS:
    - Persona: Calm, sharp, witty, elite tactical assistant. Confident, razor-focused.
-   - For direct tasks, keep spoken confirmations to a single punchy sentence.
-   - For complex plans, be organized, proactive, and structured without fluffy filler.
+   - Spoken confirmations: single punchy sentence.
+   - For complex plans: organized, proactive, and structured without fluffy filler.
 8. STRICT LANGUAGE DIRECTIVE:
    - DEFAULT LANGUAGE IS ENGLISH: Always speak, confirm, and respond in crisp, fluent ENGLISH.
-   - If the user explicitly asks for an explanation in Chinese (e.g. "explain this diagram in Chinese"), respond in Mandarin Chinese as requested.
-9. NO TITLES OR 'BOSS':
-   - NEVER call the user "Boss", "Sir", "Master", or any honorific title. Speak directly and naturally without using "Boss".
-10. NO MARKDOWN IN SPEECH:
+   - If the user explicitly asks for an explanation in Chinese, respond in Mandarin Chinese as requested.
+9. STRICTLY NO HONORIFIC TITLES:
+   - NEVER call the user "Boss", "Sir", "Master", or any honorific title. Speak directly and naturally.
+10. NO MARKDOWN IN SPOKEN SPEECH:
    - Never output asterisks (*), markdown formatting, hashtags, or bullet points in your spoken responses.`;
   }
 
@@ -59,12 +53,123 @@ CORE DIRECTIVES:
   }
 
   /**
-   * Fast-path router for instant sub-100ms response on frequent desktop actions
+   * Cleans text of markdown and honorifics before speech synthesis or display
+   */
+  cleanSpokenOutput(text) {
+    if (!text || typeof text !== 'string') return '';
+    let cleaned = text
+      // Strip markdown links [text](url) -> text
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      // Strip bold, italic, code markers (*, _, `)
+      .replace(/[*_`#~]/g, '')
+      // Strip markdown list bullet points at start of lines
+      .replace(/^\s*[-+*]\s+/gm, '')
+      // Strip honorifics
+      .replace(/\b(Boss|Sir|Master)\b[,.]?/gi, '')
+      // Clean up multiple spaces or dangling commas
+      .replace(/\s{2,}/g, ' ')
+      .replace(/,\s*,/g, ',')
+      .trim();
+
+    return cleaned;
+  }
+
+  /**
+   * Cancels any active multi-step operation or LLM generation
+   */
+  cancelActiveOperation() {
+    return actionEngine.cancelTask('User aborted task.');
+  }
+
+  /**
+   * Fast-path router for instant sub-100ms response on frequent desktop & task actions
    */
   async tryFastPath(rawText, onStatusChange = () => {}) {
     const text = rawText.toLowerCase().trim().replace(/^(?:friday|hey friday)\s*[,:]?\s*/i, '');
 
-    // 1. Dismissal / Leave commands
+    // 1. Explicit Task Lifecycle Controls (Phases 3, 4, 6)
+    if (text === 'cancel that task' || text === 'cancel task' || text === 'stop task' || text === 'cancel mission' || text === 'stop the task') {
+      const res = actionEngine.cancelTask('User instructed cancellation.');
+      return {
+        spokenText: res.message || "Task cancelled. Standing by.",
+        displayText: "Task Cancelled",
+        toolCalls: []
+      };
+    }
+
+    if (text === 'what are you currently doing?' || text === 'what are you doing' || text === 'current task' || text === 'task status' || text === 'what is your status') {
+      const active = actionEngine.getActiveTask();
+      if (!active || ['COMPLETED', 'FAILED', 'CANCELLED'].includes(active.status)) {
+        return {
+          spokenText: "I have no active multi-step task running. Ready for your instructions.",
+          displayText: "Idle - Standing By",
+          toolCalls: []
+        };
+      }
+      const reply = `Currently working on: ${active.objective}. Status is ${active.status}.`;
+      return {
+        spokenText: reply,
+        displayText: `Status: ${active.status}`,
+        toolCalls: []
+      };
+    }
+
+    if (text === 'forget this plan' || text === 'forget plan' || text === 'clear task' || text === 'forget this task') {
+      memoryService.clearActiveTask();
+      return {
+        spokenText: "Active plan cleared from working memory.",
+        displayText: "Plan Cleared",
+        toolCalls: []
+      };
+    }
+
+    if (text === 'show my pending tasks' || text === 'pending tasks' || text === 'list tasks') {
+      const pending = memoryService.getPendingTasks();
+      if (!pending || pending.length === 0) {
+        return {
+          spokenText: "You have no pending background tasks.",
+          displayText: "No Pending Tasks",
+          toolCalls: []
+        };
+      }
+      const summary = `You have ${pending.length} pending task(s): ` + pending.map((t, idx) => `${idx + 1}. ${t.objective} (${t.status})`).join('; ');
+      return {
+        spokenText: summary,
+        displayText: `Pending: ${pending.length}`,
+        toolCalls: []
+      };
+    }
+
+    if (text === 'continue my previous task' || text === 'continue task' || text === 'resume task') {
+      const pending = memoryService.getPendingTasks();
+      if (pending && pending.length > 0) {
+        const resumed = memoryService.resumeTask(pending[pending.length - 1].id);
+        const reply = `Resuming: ${resumed.objective}. Current status is ${resumed.status}.`;
+        return {
+          spokenText: reply,
+          displayText: `Resumed: ${resumed.objective}`,
+          toolCalls: []
+        };
+      }
+      const active = actionEngine.getActiveTask();
+      if (active && active.status === 'AWAITING_INFORMATION') {
+        const question = active.missingInfo && active.missingInfo.length > 0 
+          ? `Continuing ${active.objective}. Please specify: ${active.missingInfo[0]}.`
+          : `Continuing ${active.objective}. How would you like to proceed?`;
+        return {
+          spokenText: question,
+          displayText: `Continuing: ${active.objective}`,
+          toolCalls: []
+        };
+      }
+      return {
+        spokenText: "There are no suspended tasks to continue. What would you like to work on?",
+        displayText: "No Suspended Tasks",
+        toolCalls: []
+      };
+    }
+
+    // 2. Dismissal / Leave commands
     const dismissWords = [
       'go away', 'dismiss', 'close', 'hide', 'bye', 'goodbye', 
       'that is all', "that's all", 'leave me', 'you can go', 'you can leave',
@@ -79,7 +184,7 @@ CORE DIRECTIVES:
       };
     }
 
-    // Companion Mode toggle commands (user explicitly asking Friday to stay)
+    // Companion Mode toggle commands
     const stayWords = ['stay with me', 'stay', 'stay open', 'stick around', "don't go", "don't leave", 'keep open', 'stay here'];
     if (stayWords.some(w => text === w || text.startsWith(w))) {
       return {
@@ -90,7 +195,7 @@ CORE DIRECTIVES:
       };
     }
 
-    // 2. Play music / Spotify (Catch ANY play command)
+    // 3. Play music / Spotify
     if (text.startsWith('play ') || text === 'play' || text === 'play music' || text.startsWith('play song ')) {
       onStatusChange('Accessing Spotify...');
       const trackQuery = text.replace(/^play(?:\s+(?:music|song|track))?\s*/i, '').trim();
@@ -104,7 +209,7 @@ CORE DIRECTIVES:
       };
     }
 
-    // 3. Media Controls
+    // 4. Media Controls
     if (text === 'pause' || text === 'pause music' || text === 'stop music' || text === 'stop the music') {
       onStatusChange('Pausing...');
       const spotifyService = require('./spotify-service');
@@ -138,7 +243,7 @@ CORE DIRECTIVES:
       };
     }
 
-    // 4. System Power & Workstation Actions
+    // 5. System Power & Workstation Actions
     const windowsAutomation = require('./windows-automation');
 
     if (text === 'lock' || text === 'lock pc' || text === 'lock screen' || text === 'lock my pc') {
@@ -194,7 +299,7 @@ CORE DIRECTIVES:
       return { spokenText: "Muted.", displayText: "Mute Toggled", toolCalls: [{ name: 'system_action', result: res }] };
     }
 
-    // Set Volume to Exact Percentage (e.g. "set volume to 60%")
+    // Set Volume Level
     const volMatch = text.match(/^(?:set\s+)?volume\s+(?:to\s+)?(\d{1,3})(?:\s*%)?$/i);
     if (volMatch) {
       const pct = parseInt(volMatch[1], 10);
@@ -249,7 +354,7 @@ CORE DIRECTIVES:
       }
     }
 
-    // 5. Direct Web Navigation
+    // Direct Web Navigation
     const webMatch = text.match(/^(?:open|go to)\s+(youtube|github|google|reddit|twitter|x|netflix|chatgpt)(?:\.com)?$/i);
     if (webMatch) {
       const site = webMatch[1].toLowerCase();
@@ -273,7 +378,7 @@ CORE DIRECTIVES:
       };
     }
 
-    // 6. Launch / Open Application
+    // Launch Application
     const openMatch = text.match(/^(?:open|launch)\s+([a-zA-Z0-9_\- ]+)$/i);
     if (openMatch && !openMatch[1].includes('file') && !openMatch[1].includes('project') && !openMatch[1].includes('document')) {
       const appName = openMatch[1].trim();
@@ -286,7 +391,7 @@ CORE DIRECTIVES:
       };
     }
 
-    // 7. Instant Quiz & Test Solving on Screen
+    // Instant Quiz & Test Solving on Screen
     const quizMatch = /^(?:solve|answer|do|check)\s+(?:the\s+)?(?:quiz|test|question|exam)|(?:choose|pick|select)\s+(?:the\s+)?(?:option|choice|answer)\s+and\s+submit|jawab\s+soalan/i.test(text);
     if (quizMatch) {
       onStatusChange('Analyzing quiz question & options...');
@@ -313,7 +418,7 @@ CORE DIRECTIVES:
   }
 
   /**
-   * Transcribe recorded audio using OpenAI Whisper API
+   * Transcribe recorded audio using OpenAI Whisper API with timeout & error safety
    */
   async transcribeAudio(audioBuffer, mimeType = 'audio/webm') {
     const apiKey = this.getApiKey();
@@ -346,7 +451,6 @@ CORE DIRECTIVES:
     ].join(crlf);
 
     const postDataFooter = `${crlf}--${boundary}--${crlf}`;
-
     const headerBuf = Buffer.from(postDataHeader, 'utf8');
     const footerBuf = Buffer.from(postDataFooter, 'utf8');
     const fullPayload = Buffer.concat([headerBuf, audioBuffer, footerBuf]);
@@ -360,7 +464,8 @@ CORE DIRECTIVES:
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': `multipart/form-data; boundary=${boundary}`,
           'Content-Length': fullPayload.length
-        }
+        },
+        timeout: 10000
       }, (res) => {
         let body = '';
         res.on('data', chunk => body += chunk);
@@ -379,6 +484,11 @@ CORE DIRECTIVES:
         resolve('');
       });
 
+      req.on('timeout', () => {
+        req.destroy();
+        resolve('');
+      });
+
       req.write(fullPayload);
       req.end();
     });
@@ -393,8 +503,8 @@ CORE DIRECTIVES:
     // 1. Try Instant Fast-Path first for immediate action
     const fastResult = await this.tryFastPath(userText, onStatusChange);
     if (fastResult) {
-      memoryService.addConversationTurn('user', userText);
-      memoryService.addConversationTurn('assistant', fastResult.spokenText);
+      memoryService.addConversationTurn('user', userText, 'general');
+      memoryService.addConversationTurn('assistant', fastResult.spokenText, 'general');
       activityLogger.logTurn({
         input: userText,
         actions: fastResult.toolCalls || [],
@@ -422,24 +532,124 @@ CORE DIRECTIVES:
       };
     }
 
-    // Record turn in memory
-    memoryService.addConversationTurn('user', userText);
+    // 2. Active Task & Progressive Planning Check (Phases 3, 4, 6)
+    const activeTask = actionEngine.getActiveTask();
+    const isContinuingActiveTask = activeTask && 
+      !['COMPLETED', 'FAILED', 'CANCELLED'].includes(activeTask.status) &&
+      (activeTask.status === 'AWAITING_INFORMATION' || activeTask.status === 'PLANNING') &&
+      !userText.toLowerCase().startsWith('what is') &&
+      !userText.toLowerCase().startsWith('play') &&
+      !userText.toLowerCase().startsWith('solve');
 
-    // Build message history
-    const recentHistory = memoryService.getRecentConversation(14);
+    if (isContinuingActiveTask) {
+      // User is providing follow-up answers to an active task (e.g. Greece trip parameters)
+      onStatusChange('Updating plan with your preferences...');
+      const followUp = actionEngine.processTaskFollowUp(userText, activeTask);
+
+      memoryService.addConversationTurn('user', userText, activeTask.domain, activeTask.id);
+
+      if (followUp.requiresAnswer) {
+        const reply = followUp.question;
+        memoryService.addConversationTurn('assistant', reply, activeTask.domain, activeTask.id);
+        activityLogger.logTurn({
+          input: userText,
+          actions: [],
+          output: reply,
+          durationMs: Date.now() - startTime,
+          status: 'AWAITING_INFORMATION'
+        });
+        return {
+          spokenText: reply,
+          displayText: reply,
+          toolCalls: []
+        };
+      }
+
+      if (followUp.readyToExecute && followUp.planSteps) {
+        // Execute the first planned search step immediately
+        const firstStep = followUp.planSteps[0];
+        onStatusChange(`Executing: ${firstStep.title}...`);
+        actionEngine.updateStep(1, 'RUNNING');
+        const toolResult = await toolRegistry.executeTool(firstStep.tool, firstStep.args);
+        actionEngine.updateStep(1, 'COMPLETED', toolResult, true);
+        actionEngine.advanceStep();
+
+        const summary = `${followUp.confirmation} First step completed: ${firstStep.title}.`;
+        memoryService.addConversationTurn('assistant', summary, activeTask.domain, activeTask.id);
+        activityLogger.logTurn({
+          input: userText,
+          actions: [{ name: firstStep.tool, args: firstStep.args, result: toolResult }],
+          output: summary,
+          durationMs: Date.now() - startTime,
+          status: 'SUCCESS'
+        });
+        return {
+          spokenText: summary,
+          displayText: summary,
+          toolCalls: [{ name: firstStep.tool, args: firstStep.args, result: toolResult }]
+        };
+      }
+    }
+
+    // 3. New Goal Assessment (e.g. "Friday, I want to travel to Greece. Plan a trip for me.")
+    const complexGoal = actionEngine.assessComplexGoal(userText);
+    if (complexGoal.isComplex) {
+      const newTask = actionEngine.createTask(complexGoal.objective, complexGoal.domain, complexGoal.initialContext);
+      memoryService.addConversationTurn('user', userText, complexGoal.domain, newTask.id);
+
+      if (complexGoal.domain === 'travel') {
+        const dest = complexGoal.initialContext.destination;
+        const initialQuestion = `${dest} sounds phenomenal. Where will you be departing from, and how many days are you planning for the trip?`;
+        memoryService.addConversationTurn('assistant', initialQuestion, complexGoal.domain, newTask.id);
+
+        activityLogger.logTurn({
+          input: userText,
+          actions: [],
+          output: initialQuestion,
+          durationMs: Date.now() - startTime,
+          status: 'AWAITING_INFORMATION'
+        });
+
+        return {
+          spokenText: initialQuestion,
+          displayText: `Planning trip to ${dest}`,
+          toolCalls: []
+        };
+      }
+    }
+
+    // 4. General LLM Orchestration with Strict Context Isolation (Phase 2 & Phase 6)
+    const lower = userText.toLowerCase();
+    const domain = lower.includes('flight') || lower.includes('travel') || lower.includes('hotel') ? 'travel'
+                 : lower.includes('quiz') || lower.includes('exam') || lower.includes('cisco') ? 'quiz'
+                 : lower.includes('code') || lower.includes('git') || lower.includes('build') ? 'code'
+                 : 'general';
+
+    // Record turn tagged with domain
+    memoryService.addConversationTurn('user', userText, domain);
+
+    // Retrieve filtered history (strictly omitting past unrelated domain turns)
+    const filteredHistory = memoryService.getFilteredConversation(domain, 6);
     const messages = [
       { role: 'system', content: this.systemPrompt }
     ];
 
-    for (const item of recentHistory) {
+    // Only inject active task context if relevant to this turn
+    if (activeTask && activeTask.domain === domain && !['COMPLETED', 'FAILED', 'CANCELLED'].includes(activeTask.status)) {
+      messages.push({
+        role: 'system',
+        content: `[Active Task Context: Objective="${activeTask.objective}", Status="${activeTask.status}", Gathered Parameters=${JSON.stringify(activeTask.context)}]`
+      });
+    }
+
+    for (const item of filteredHistory) {
       messages.push({
         role: item.role === 'user' ? 'user' : 'assistant',
         content: item.content
       });
     }
 
-    // Check if user is asking about screen content, clicking, quizzes, or filling forms
-    const lower = userText.toLowerCase();
+    // Vision detection
     const needsVision = lower.includes('screen') || 
                         lower.includes('document') || 
                         lower.includes('paragraph') || 
@@ -450,7 +660,6 @@ CORE DIRECTIVES:
                         lower.includes('question') || 
                         lower.includes('answer') || 
                         lower.includes('button') || 
-                        lower.includes('google') ||
                         lower.includes('form') ||
                         options.inspectScreen;
 
@@ -476,9 +685,15 @@ CORE DIRECTIVES:
       let response = await this._chatCompletion(messages, tools);
       const executedTools = [];
 
-      // Loop for tool calls (support up to 4 consecutive tool steps)
+      // Loop for tool calls (up to 4 consecutive tool steps)
       let iterations = 0;
       while (response.tool_calls && response.tool_calls.length > 0 && iterations < 4) {
+        // Check if task was cancelled mid-flight
+        if (actionEngine.isCancelled()) {
+          const cancelMsg = "Task cancelled during execution.";
+          return { spokenText: cancelMsg, displayText: "Cancelled", toolCalls: executedTools };
+        }
+
         iterations++;
         messages.push(response);
 
@@ -506,26 +721,27 @@ CORE DIRECTIVES:
         response = await this._chatCompletion(messages, tools);
       }
 
-      const finalReply = response.content || 'Task completed.';
-      memoryService.addConversationTurn('assistant', finalReply);
+      const rawReply = response.content || 'Task completed.';
+      const cleanReply = this.cleanSpokenOutput(rawReply);
 
-      // Log turn to rolling activity log file
+      memoryService.addConversationTurn('assistant', cleanReply, domain);
+
       activityLogger.logTurn({
         input: userText,
         actions: executedTools,
-        output: finalReply,
+        output: cleanReply,
         durationMs: Date.now() - startTime,
         status: 'SUCCESS'
       });
 
       return {
-        spokenText: finalReply,
-        displayText: finalReply,
+        spokenText: cleanReply,
+        displayText: cleanReply,
         toolCalls: executedTools
       };
     } catch (err) {
       console.error('AiOrchestrator error:', err);
-      const errMsg = `Diagnostic alert: ${err.message}`;
+      const errMsg = `Diagnostic notice: ${err.message}`;
 
       activityLogger.logTurn({
         input: userText,
@@ -544,16 +760,19 @@ CORE DIRECTIVES:
   }
 
   /**
-   * Synthesize speech using OpenAI TTS API
+   * Synthesize speech using OpenAI TTS API with markdown stripped and error fallback
    */
   async synthesizeSpeech(text) {
     const apiKey = this.getApiKey();
     if (!apiKey) return null;
 
+    const cleanedText = this.cleanSpokenOutput(text);
+    if (!cleanedText) return null;
+
     return new Promise((resolve) => {
       const payload = JSON.stringify({
         model: 'tts-1',
-        input: text.slice(0, 1000),
+        input: cleanedText.slice(0, 1000),
         voice: config.voice || 'alloy',
         response_format: 'mp3'
       });
@@ -567,7 +786,7 @@ CORE DIRECTIVES:
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(payload)
         },
-        timeout: 4000
+        timeout: 6000
       }, (res) => {
         if (res.statusCode !== 200) {
           resolve(null);
@@ -600,7 +819,7 @@ CORE DIRECTIVES:
         messages,
         tools: tools && tools.length > 0 ? tools : undefined,
         tool_choice: tools && tools.length > 0 ? 'auto' : undefined,
-        temperature: 0.4,
+        temperature: 0.3,
         max_tokens: 450
       });
 
@@ -613,7 +832,7 @@ CORE DIRECTIVES:
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(payload)
         },
-        timeout: 10000
+        timeout: 12000
       }, (res) => {
         let body = '';
         res.on('data', chunk => body += chunk);
@@ -635,7 +854,7 @@ CORE DIRECTIVES:
       });
 
       req.on('error', reject);
-      req.setTimeout(12000, () => {
+      req.setTimeout(14000, () => {
         req.destroy();
         reject(new Error('AI request timed out'));
       });

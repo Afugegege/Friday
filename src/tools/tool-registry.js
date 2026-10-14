@@ -46,6 +46,8 @@ class ToolRegistry {
       return {
         status: 'executed',
         tool: name,
+        success: result && result.success !== undefined ? result.success : true,
+        error: result && result.error ? result.error : null,
         result
       };
     } catch (err) {

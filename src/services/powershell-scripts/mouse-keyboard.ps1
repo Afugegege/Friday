@@ -7,6 +7,19 @@ param (
 )
 
 try {
+    $dpiDef = @"
+    using System;
+    using System.Runtime.InteropServices;
+    public class DpiAwarenessOps {
+        [DllImport("user32.dll")]
+        public static extern bool SetProcessDPIAware();
+    }
+"@
+    Add-Type -TypeDefinition $dpiDef -ErrorAction SilentlyContinue
+    [DpiAwarenessOps]::SetProcessDPIAware() | Out-Null
+} catch {}
+
+try {
     $typeDef = @"
     using System;
     using System.Runtime.InteropServices;
@@ -59,7 +72,6 @@ try {
     }
     elseif ($Action -eq "type") {
         Add-Type -AssemblyName System.Windows.Forms
-        # If text ends with enter, handle it cleanly
         $cleanText = $Text.Replace("+", "{+}").Replace("^", "{^}").Replace("%", "{%}").Replace("~", "{~}").Replace("(", "{(}").Replace(")", "{)}")
         [System.Windows.Forms.SendKeys]::SendWait($cleanText)
         Write-Output "TYPE_SUCCESS"

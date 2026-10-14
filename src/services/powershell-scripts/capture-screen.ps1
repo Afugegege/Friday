@@ -2,6 +2,19 @@ param (
     [string]$OutputPath = "$env:TEMP\friday_screen_capture.png"
 )
 
+try {
+    $dpiDef = @"
+    using System;
+    using System.Runtime.InteropServices;
+    public class DpiAwareness {
+        [DllImport("user32.dll")]
+        public static extern bool SetProcessDPIAware();
+    }
+"@
+    Add-Type -TypeDefinition $dpiDef -ErrorAction SilentlyContinue
+    [DpiAwareness]::SetProcessDPIAware() | Out-Null
+} catch {}
+
 [Reflection.Assembly]::LoadWithPartialName("System.Drawing") | Out-Null
 [Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null
 

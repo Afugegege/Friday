@@ -23,6 +23,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function stopSpeaking() {
     if (activeAudio) {
+      activeAudio.onended = null;
+      activeAudio.onerror = null;
       activeAudio.pause();
       activeAudio.currentTime = 0;
       activeAudio = null;
@@ -75,6 +77,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   function dismissPill() {
     isCompanionMode = false;
     resetCompanionTimer();
+    stopSpeaking();
+    window.fridayAPI.cancelTask().catch(() => {});
     setState('idle');
     window.fridayAPI.hidePill();
   }
