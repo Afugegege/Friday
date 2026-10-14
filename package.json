@@ -1,0 +1,56 @@
+{
+  "name": "friday-ai",
+  "version": "1.0.0",
+  "description": "FRIDAY - Personal AI Voice Desktop Assistant for Windows",
+  "main": "src/main/main.js",
+  "scripts": {
+    "prestart": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stop-friday.ps1",
+    "start": "electron .",
+    "stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stop-friday.ps1",
+    "dev": "electron . --dev",
+    "test": "node tests/test-modules.js",
+    "verify": "electron . --test-mode",
+    "build:win": "electron-builder --win portable"
+  },
+  "keywords": [
+    "ai",
+    "voice-assistant",
+    "electron",
+    "windows",
+    "friday",
+    "desktop-automation"
+  ],
+  "author": "Friday AI Team",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11"
+  },
+  "build": {
+    "appId": "com.friday.ai.assistant",
+    "productName": "FRIDAY",
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ],
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ]
+  }
+}

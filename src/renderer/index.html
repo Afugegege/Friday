@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FRIDAY Floating Pill</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="friday-pill" class="pill-container idle">
+    <!-- Drag Handle / Gripper -->
+    <div id="drag-handle" class="drag-handle" title="Drag to reposition">
+      <div class="grip-dot"></div>
+      <div class="grip-dot"></div>
+      <div class="grip-dot"></div>
+    </div>
+
+    <!-- Center Waveform Canvas (Full Pill Focus) -->
+    <div class="canvas-wrapper">
+      <canvas id="waveform-canvas" width="300" height="56"></canvas>
+    </div>
+
+    <!-- Quick action / Dismiss button -->
+    <button id="close-btn" class="pill-btn" title="Dismiss (Esc)">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+  </div>
+
+  <script src="js/audio-capture.js"></script>
+  <script src="js/visualizer.js"></script>
+  <script src="js/wake-word.js"></script>
+  <script src="js/pill-controller.js"></script>
+</body>
+</html>

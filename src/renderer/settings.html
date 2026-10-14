@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FRIDAY Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Inter', -apple-system, sans-serif;
+    }
+    body {
+      background: #0d1117;
+      color: #e6edf3;
+      padding: 24px;
+      user-select: none;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #21262d;
+    }
+    .logo-badge {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #1f6feb, #58a6ff);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 18px;
+      color: #fff;
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .subtitle {
+      font-size: 12px;
+      color: #8b949e;
+    }
+    .section {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 18px;
+    }
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 14px;
+      color: #58a6ff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .field-group {
+      margin-bottom: 14px;
+    }
+    .field-group:last-child {
+      margin-bottom: 0;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: #c9d1d9;
+      margin-bottom: 6px;
+    }
+    input[type="text"], input[type="password"], select {
+      width: 100%;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 9px 12px;
+      color: #e6edf3;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus, input[type="password"]:focus, select:focus {
+      border-color: #58a6ff;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 0;
+    }
+    .toggle-info h4 {
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .toggle-info p {
+      font-size: 11px;
+      color: #8b949e;
+    }
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 24px;
+    }
+    .btn {
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.2s;
+    }
+    .btn-secondary {
+      background: #21262d;
+      border-color: #30363d;
+      color: #c9d1d9;
+    }
+    .btn-secondary:hover {
+      background: #30363d;
+    }
+    .btn-primary {
+      background: #238636;
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: #2ea043;
+    }
+    .status-msg {
+      font-size: 12px;
+      color: #3fb950;
+      margin-top: 8px;
+      text-align: right;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo-badge">F</div>
+    <div>
+      <h1>FRIDAY Settings</h1>
+      <div class="subtitle">AI Voice Desktop Assistant for Windows</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">OpenAI Intelligence</div>
+    <div class="field-group">
+      <label for="api-key">OpenAI API Key</label>
+      <input type="password" id="api-key" placeholder="sk-proj-...">
+      <div style="font-size: 11px; color: #8b949e; margin-top: 4px;">
+        Powers Friday's reasoning, tool calling, vision inspection, and spoken voice.
+      </div>
+    </div>
+    <div class="field-group">
+      <label for="voice-select">Friday Voice</label>
+      <select id="voice-select">
+        <option value="alloy">Alloy (Balanced & Natural)</option>
+        <option value="echo">Echo (Warm & Articulate)</option>
+        <option value="fable">Fable (British Accent)</option>
+        <option value="onyx">Onyx (Deep & Authoritative)</option>
+        <option value="nova">Nova (Bright & Energetic)</option>
+        <option value="shimmer">Shimmer (Calm & Clear)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Voice & Interaction</div>
+    <div class="toggle-row field-group">
+      <div class="toggle-info">
+        <h4>Wake Word Detection</h4>
+        <p>Activate Friday automatically when you say "Friday"</p>
+      </div>
+      <input type="checkbox" id="wake-toggle" checked style="width: 18px; height: 18px; cursor: pointer;">
+    </div>
+    <div class="field-group" style="margin-top: 12px;">
+      <label for="hide-delay">Auto-Hide Delay (seconds)</label>
+      <select id="hide-delay">
+        <option value="3000">3 Seconds</option>
+        <option value="4000" selected>4 Seconds</option>
+        <option value="6000">6 Seconds</option>
+        <option value="10000">10 Seconds</option>
+      </select>
+    </div>
+    <div style="font-size: 11px; color: #8b949e; margin-top: 6px;">
+      Shortcut: Press <b>Ctrl + Alt + F</b> anytime to activate without wake word.
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Spotify & Media Controls</div>
+    <div style="font-size: 12px; color: #8b949e; line-height: 1.5;">
+      Friday automatically uses <b>Windows Media Controls</b> for instant play, pause, next track, and previous track. For direct playlist queries, configure Spotify Developer credentials below (optional).
+    </div>
+    <div class="field-group" style="margin-top: 10px;">
+      <label for="spotify-id">Spotify Client ID (Optional)</label>
+      <input type="text" id="spotify-id" placeholder="Optional Spotify Client ID">
+    </div>
+    <div class="field-group">
+      <label for="spotify-secret">Spotify Client Secret (Optional)</label>
+      <input type="password" id="spotify-secret" placeholder="Optional Spotify Client Secret">
+    </div>
+  </div>
+
+  <div class="status-msg" id="status-msg">Settings saved successfully.</div>
+
+  <div class="actions">
+    <button class="btn btn-secondary" id="test-btn">Test Friday Pill</button>
+    <button class="btn btn-primary" id="save-btn">Save Changes</button>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const config = await window.fridayAPI.getConfig();
+      const apiKeyInput = document.getElementById('api-key');
+      const voiceSelect = document.getElementById('voice-select');
+      const wakeToggle = document.getElementById('wake-toggle');
+      const hideDelaySelect = document.getElementById('hide-delay');
+      const saveBtn = document.getElementById('save-btn');
+      const testBtn = document.getElementById('test-btn');
+      const statusMsg = document.getElementById('status-msg');
+
+      if (config.hasApiKey) {
+        apiKeyInput.value = config.openaiApiKey;
+      }
+      if (config.voice) voiceSelect.value = config.voice;
+      if (config.wakeWordEnabled !== undefined) wakeToggle.checked = config.wakeWordEnabled;
+      if (config.autoHideDelayMs) hideDelaySelect.value = config.autoHideDelayMs.toString();
+
+      saveBtn.addEventListener('click', async () => {
+        const newCfg = {
+          openaiApiKey: apiKeyInput.value.trim(),
+          voice: voiceSelect.value,
+          wakeWordEnabled: wakeToggle.checked,
+          autoHideDelayMs: parseInt(hideDelaySelect.value, 10)
+        };
+        await window.fridayAPI.saveConfig(newCfg);
+        statusMsg.style.display = 'block';
+        setTimeout(() => { statusMsg.style.display = 'none'; }, 2500);
+      });
+
+      testBtn.addEventListener('click', () => {
+        window.fridayAPI.showPill();
+      });
+    });
+  </script>
+</body>
+</html>
